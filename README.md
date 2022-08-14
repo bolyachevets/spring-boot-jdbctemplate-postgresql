@@ -1,4 +1,4 @@
-## Helm Chart
+## Helm Chart (to use with templates)
 ```
 helm install java-crud-webhook . --values=examples/java-crud.yaml
 
