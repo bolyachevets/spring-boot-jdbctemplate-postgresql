@@ -1,0 +1,60 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  annotations:
+    alpha.image.policy.openshift.io/resolve-names: '*'
+    app.openshift.io/vcs-ref: ''
+    app.openshift.io/vcs-uri: 'https://github.com/bolyachevets/spring-boot-jdbctemplate-postgresql.git'
+    deployment.kubernetes.io/revision: '2'
+    image.openshift.io/triggers: >-
+      [{"from":{"kind":"ImageStreamTag","name":"spring-boot-jdbctemplate-postgresql-git:latest","namespace":"d0278b-test"},"fieldPath":"spec.template.spec.containers[?(@.name==\"spring-boot-jdbctemplate-postgresql-git\")].image","pause":"false"}]
+    openshift.io/generated-by: OpenShiftWebConsole
+  resourceVersion: '4304858394'
+  name: spring-boot-jdbctemplate-postgresql-git
+  labels:
+    app: spring-boot-jdbctemplate-postgresql-git
+    app.kubernetes.io/component: spring-boot-jdbctemplate-postgresql-git
+    app.kubernetes.io/instance: spring-boot-jdbctemplate-postgresql-git
+    app.kubernetes.io/name: spring-boot-jdbctemplate-postgresql-git
+    app.kubernetes.io/part-of: spring-boot-jdbctemplate-postgresql-git-app
+    app.openshift.io/runtime: java
+    app.openshift.io/runtime-version: openjdk-11-el7
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spring-boot-jdbctemplate-postgresql-git
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: spring-boot-jdbctemplate-postgresql-git
+        deploymentconfig: spring-boot-jdbctemplate-postgresql-git
+    spec:
+      containers:
+        - name: spring-boot-jdbctemplate-postgresql-git
+          image: >-
+            image-registry.openshift-image-registry.svc:5000/d0278b-test/spring-boot-jdbctemplate-postgresql-git@sha256:bbfca13869c23f28b858f1e1e54980c5f0e6b1c4b05eb15ae32901d41add612a
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+            - containerPort: 8443
+              protocol: TCP
+            - containerPort: 8778
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600

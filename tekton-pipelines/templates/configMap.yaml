@@ -1,0 +1,17 @@
+{{ range .Values.configMaps -}}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ .name }}
+  labels:
+    app: {{ template "pipelines.name" $ }}
+    chart: {{ template "pipelines.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+data:
+  {{- range .files }}
+  {{ .name }}:
+      {{ .data | toYaml | indent 4}}
+  {{- end }}
+{{ end -}}

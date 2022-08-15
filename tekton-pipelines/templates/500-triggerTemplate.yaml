@@ -1,0 +1,123 @@
+{{ range $pip := .Values.pipelines }}
+{{ range .triggers }}
+---
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: {{ .triggerName }}
+  labels:
+    app: {{ template "pipelines.name" $ }}
+    chart: {{ template "pipelines.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+spec:
+  {{- if $pip.pipeline_params -}}
+  {{- if gt (len $pip.pipeline_params) 0 }}
+  params:
+    {{- range $pip.pipeline_params }}
+    - name: {{ .name }}
+      description: {{ .description }}
+      {{- if .default }}
+      default: {{ .default }}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- end }}
+
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        name: {{ $pip.name }}-run-$(uid)
+      spec:
+        pipelineRef:
+          name: {{ $pip.name }}
+
+        workspaces:
+        {{- if $pip.workspaces -}}
+        {{ if gt (len $pip.workspaces) 0 }}
+          {{ range $pip.workspaces }}
+          - name: {{ .name }}
+            {{ if .persistentVolumeClaim }}
+            persistentVolumeClaim:
+              claimName: {{ .persistentVolumeClaim }}
+            {{ else if .volumeClaimTemplate }}
+            volumeClaimTemplate:
+              metadata:
+                name: pr-pvc
+                labels:
+                  app: {{ template "pipelines.name" $ }}
+                  chart: {{ template "pipelines.chart" $ }}
+                  release: {{ $.Release.Name }}
+                  heritage: {{ $.Release.Service }}
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: {{ .volumeClaimTemplate }}
+            {{ else if .secret }}
+            secret:
+              secretName: {{ .secret }}
+            {{ else }}
+            emptyDir: {}
+            {{ end }}
+          {{ end }}
+        {{ end }}
+        {{- end -}}
+
+        {{ with $pip.podTemplate }}
+        podTemplate:
+            {{ with .securityContext }}
+            securityContext:
+                runAsNonRoot: {{ .runAsNonRoot }}
+                runAsUser: {{ .runAsUser }}
+            {{ end }}
+        {{ end }}
+
+        {{- if $pip.serviceAccountName -}}
+        {{- if gt (len $pip.serviceAccountName) 0 }}
+        taskRunSpecs:
+          {{- range $pip.serviceAccountName }}
+          - pipelineTaskName: {{ .pipelineTaskName }}
+            taskServiceAccountName: {{ .taskServiceAccountName }}
+          {{- end -}}
+        {{- end -}}
+        {{- end }}
+
+        {{- if $pip.pipeline_params -}}
+        {{- if gt (len $pip.pipeline_params) 0 }}
+        params:
+          {{- range $pip.pipeline_params }}
+          - name: {{ .name }}
+            {{ if .resourceTemplate }}
+            value: {{ .resourceTemplate }}
+            {{ else if .default }}
+            value: {{ .default }}
+            {{ end }}
+          {{- end -}}
+        {{- end -}}
+        {{- end }}
+
+        {{- if $pip.resources -}}
+        {{- if gt (len $pip.resources) 0 }}
+        resources:
+          {{- range $pip.resources }}
+          - name: {{ .name }}
+            resourceSpec:
+              type: {{ .type }}
+              {{- if .params -}}
+              {{- if gt (len .params) 0 }}
+              params:
+                {{- range .params }}
+                - name: {{ .name }}
+                  value: {{ .value }}
+                {{- end -}}
+              {{- end -}}
+              {{- end -}}
+
+          {{- end -}}
+        {{- end -}}
+        {{- end -}}
+{{ end }}
+{{ end }}

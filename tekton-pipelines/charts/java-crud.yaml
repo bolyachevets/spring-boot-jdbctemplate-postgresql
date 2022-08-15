@@ -1,0 +1,209 @@
+nameOverride: ""
+fullnameOverride: ""
+
+tasks:
+  - name: cli-build-helm
+    params:
+      - name: git-revision
+        type: string
+      - name: image-tag
+        type: string
+    volumes:
+      - name: m2-vol
+        persistentVolumeClaim: pip-tkt-m2-pvc
+    workspaces:
+    - name: source
+    steps:
+      - image: quay.io/openshift/origin-cli:latest
+        name: image-build
+        volumeMounts:
+          - name: m2-vol
+            mountPath: /workspace/m2-content
+        env:
+        - name: GIT_REVISION
+          value: $(params.git-revision)
+        - name: IMG_TAG
+          value: $(params.image-tag)
+        script: |
+          #!/usr/bin/env sh
+          echo "--Commencing the build--"
+          oc start-build spring-boot-jdbctemplate-postgresql-git --wait
+          oc tag spring-boot-jdbctemplate-postgresql-git:latest spring-boot-jdbctemplate-postgresql-git:$IMG_TAG
+          echo "---App is up in test namespace---"
+  - name: maven-helm
+    params:
+    - name: git-revision
+      type: string
+    volumes:
+    - name: m2-vol
+      persistentVolumeClaim: pip-tkt-m2-pvc
+    workspaces:
+      - name: source
+    steps:
+      - name: build
+        image: maven:3.8.1-jdk-11-slim
+        script: |
+          #!/usr/bin/env bash
+          /usr/bin/mvn clean package spring-boot:repackage install
+          echo "---Maven build complete---"
+        env:
+        - name: HOME
+          value: .
+        - name: GIT_REVISION
+          value: $(params.git-revision)
+        - name: MAVEN_OPTS
+          value: "-server -Xms256m -Xmx512m -XX:MetaspaceSize=96m -XX:MaxMetaspaceSize=256m -Djava.net.preferIPv4Stack=true -Djava.awt.headless=true -XX:+UseParallelOldGC -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90"
+        volumeMounts:
+        - name: m2-vol
+          mountPath: /workspace/.m2/repository
+        workingDir: /workspace/source
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 50m
+          limits:
+            memory: 2Gi
+            cpu: "1"
+
+pipelines:
+  - name: pr-merged
+    triggers:
+      - triggerName: trigger-pr-merged
+        bindingName: binding-pr-merged
+    serviceAccountName:
+      - pipelineTaskName: image-build
+        taskServiceAccountName: pipeline
+    pipeline_params:
+      - name: git-revision
+        type: string
+        description: pull request head commit id
+        default: main
+        incomingValue: $(body.pull_request.head.sha)
+        resourceTemplate: $(tt.params.git-revision)
+      - name: image-tag
+        description: image deployment trigger tag
+        type: string
+        default: prod
+    workspaces:
+      - name: shared-workspace
+        volumeClaimTemplate: 300Mi
+    tasks:
+      - name: image-build
+        ref:
+          name: cli-build-helm
+        workspaces:
+        - name: source
+          workspace: shared-workspace
+        params:
+          - name: git-revision
+            value: $(params.git-revision)
+          - name: image-tag
+            value: $(params.image-tag)
+  - name: pr-opened
+    triggers:
+      - triggerName: trigger-pr-open
+        bindingName: binding-pr-open
+    serviceAccountName:
+      - pipelineTaskName: clone-repo
+        taskServiceAccountName: git-bot
+      - pipelineTaskName: maven-build
+        taskServiceAccountName: pipeline
+    pipeline_params:
+      - name: git-url
+        type: string
+        description: git repo url
+        incomingValue: $(body.repository.ssh_url)
+        resourceTemplate: $(tt.params.git-url)
+      - name: git-revision
+        type: string
+        description: pull request head commit id
+        default: main
+        incomingValue: $(body.pull_request.head.sha)
+        resourceTemplate: $(tt.params.git-revision)
+      - name: image-tag
+        description: image deployment trigger tag
+        type: string
+        default: test
+    workspaces:
+      - name: shared-workspace
+        volumeClaimTemplate: 300Mi
+    podTemplate:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+    tasks:
+      - name: clone-repo
+        workspaces:
+          - name: output
+            workspace: shared-workspace
+        ref:
+          kind: ClusterTask
+          name: git-clone
+        params:
+          - name: url
+            value: $(params.git-url)
+          - name: revision
+            value: $(params.git-revision)
+      - name: maven-build
+        ref:
+          name: maven-helm
+        params:
+        - name: git-revision
+          value: $(params.git-revision)
+        runAfter:
+          - clone-repo
+        workspaces:
+        - name: source
+          workspace: shared-workspace
+      - name: image-build
+        ref:
+          name: cli-build-helm
+        runAfter:
+          - maven-build
+        workspaces:
+        - name: source
+          workspace: shared-workspace
+        params:
+          - name: git-revision
+            value: $(params.git-revision)
+          - name: image-tag
+            value: $(params.image-tag)
+events:
+  install: true
+  defaultRB: false
+  listeners:
+    - name: java-crud-listener
+      triggers:
+        - name: pr-open-trigger
+          trigger: trigger-pr-open
+          binding: binding-pr-open
+          interceptors:
+            - name: github
+              eventTypes:
+                - name: pull_request
+              secretName: github-secret
+            - name: cel
+              filter: "body.pull_request.base.ref in ['main']"
+            - name: cel
+              filter: "body.action in ['opened', 'reopened']"
+        - name: pr-merge-trigger
+          trigger: trigger-pr-merged
+          binding: binding-pr-merged
+          interceptors:
+            - name: github
+              eventTypes:
+                - name: pull_request
+              secretName: github-secret
+            - name: cel
+              filter: "body.pull_request.base.ref in ['main']"
+            - name: cel
+              filter: "body.action in ['closed']"
+            - name: cel
+              filter: "body.pull_request.merged"
+      ingress:
+        enabled: true
+        name: java-crud-route
+        annotations:
+          openshift.io/host.generated: 'true'
+        host: el-java-crud.apps.silver.devops.gov.bc.ca
+        service: el-java-crud-listener
