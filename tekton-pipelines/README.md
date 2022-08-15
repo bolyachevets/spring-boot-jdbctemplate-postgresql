@@ -6,10 +6,16 @@ helm install java-crud-webhook . --values=examples/java-crud.yaml
 ```
 helm uninstall java-crud-webhook
 ```
+
+## Create BuildConfigs
+```
+oc create -f build-configs/java-crud-bc.yaml
+oc create -f build-configs/postgress-bc.yaml
+```
+
 ## Deploy OpenShift YAMLs
 
-e.g. DB:
-
 ```
+oc create -f java-crud-bc.yaml
 oc process -f db.yaml -p TAG=test | oc apply -f -
 ```
