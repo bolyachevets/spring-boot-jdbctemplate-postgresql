@@ -1,6 +1,6 @@
 ## Create Tekton Pipelines
 ```
-helm install java-crud-webhook . --values=examples/java-crud.yaml
+helm install java-crud-webhook . --values=charts/java-crud.yaml
 ```
 ## Tear down Tekton Pipelines
 ```
