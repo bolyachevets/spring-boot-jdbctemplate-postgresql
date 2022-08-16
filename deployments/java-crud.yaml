@@ -34,7 +34,7 @@ spec:
       containers:
         - name: spring-boot-jdbctemplate-postgresql-git
           image: >-
-            image-registry.openshift-image-registry.svc:5000/d0278b-test/spring-boot-jdbctemplate-postgresql-git@sha256:bbfca13869c23f28b858f1e1e54980c5f0e6b1c4b05eb15ae32901d41add612a
+            image-registry.openshift-image-registry.svc:5000/d0278b-test/spring-boot-jdbctemplate-postgresql-git:test
           ports:
             - containerPort: 8080
               protocol: TCP
